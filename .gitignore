@@ -1,0 +1,16 @@
+# Dataset
+data/raw/*
+data/processed/*
+
+# Model checkpoints & logs
+saved_models/*
+runs/*
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Temporary files
+*.pkl
+*.h5
+*.ipynb_checkpoints

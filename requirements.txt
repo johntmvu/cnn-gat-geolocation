@@ -1,0 +1,10 @@
+torch
+torchvision
+torchaudio
+pillow
+tqdm
+pandas
+scikit-learn
+matplotlib
+seaborn
+requests
