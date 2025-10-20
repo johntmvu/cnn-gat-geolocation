@@ -28,9 +28,9 @@ from tqdm import tqdm
 # CONFIGURATION
 # ============================================================
 
-DATASET_TRAIN_CSV = "gldv2_micro/train.csv"
-DATASET_VAL_CSV = "gldv2_micro/val.csv"
-IMAGE_ROOT = "gldv2_micro/images"
+DATASET_TRAIN_CSV = "data/gldv2_micro/train.csv"
+DATASET_VAL_CSV = "data/gldv2_micro/val.csv"
+IMAGE_ROOT = "data/gldv2_micro/images"
 MODEL_DIR = "models"
 OUTPUT_DIR = "outputs"
 
@@ -64,7 +64,7 @@ class LandmarkDataset(Dataset):
         img_name, label = self.samples[idx]
 
         # Build the full image path without nested directories
-        img_path = os.path.join(self.root_dir, f"{img_name}.jpg")
+        img_path = os.path.join(self.root_dir, f"{img_name}")
 
         from PIL import Image
         try:
@@ -103,6 +103,12 @@ label2id = {label: idx for idx, label in enumerate(sorted(train_df["landmark_id"
 id2label = {v: k for k, v in label2id.items()}
 train_df["landmark_id"] = train_df["landmark_id"].map(label2id)
 val_df["landmark_id"] = val_df["landmark_id"].map(label2id)
+
+if DEVICE.type == "cpu":
+    # Filter the dataset to include only 100 classes for CPU processing
+    selected_classes = train_df["landmark_id"].unique()[:100]
+    train_df = train_df[train_df["landmark_id"].isin(selected_classes)]
+    val_df = val_df[val_df["landmark_id"].isin(selected_classes)]
 
 num_classes = len(label2id)
 print(f"Number of classes: {num_classes}")

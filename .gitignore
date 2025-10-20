@@ -1,10 +1,6 @@
-# Dataset
-data/raw/*
-data/processed/*
-
 # Model checkpoints & logs
-saved_models/*
-runs/*
+models/*
+outputs/*
 
 # Python cache
 __pycache__/
@@ -15,8 +11,6 @@ __pycache__/
 *.h5
 *.ipynb_checkpoints
 
-# Ignore all files in the gldv2_micro directory
+# Datset
 data/gldv2_micro/*
-
-# Do not ignore the CSV files in the gldv2_micro directory
-!data/gldv2_micro/*.csv
+data/gldv2_dataset/*

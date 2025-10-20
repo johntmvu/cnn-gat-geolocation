@@ -15,6 +15,7 @@ from PIL import Image
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from train_model import LandmarkDataset, val_ds, label2id, id2label, DEVICE, MODEL_DIR
+import pandas as pd
 
 # ============================================================
 # LOAD MODEL
@@ -29,6 +30,14 @@ model.load_state_dict(torch.load(model_path, map_location=DEVICE))
 model.eval().to(DEVICE)
 
 print(f"Loaded model from {model_path}")
+
+# Load the mapping CSV
+mapping_df = pd.read_csv("data/gldv2_micro/train_label_to_category.csv")
+id_to_location = dict(zip(mapping_df["landmark_id"], mapping_df["category"]))
+
+# Function to map landmark_id to location category
+def map_landmark_to_location(landmark_id):
+    return id_to_location.get(landmark_id, "Unknown")
 
 # ============================================================
 # SAMPLE PREDICTIONS
@@ -47,6 +56,8 @@ for i, idx in enumerate(indices):
         output = model(img.unsqueeze(0).to(DEVICE))
         probs = F.softmax(output, dim=1)
         pred = torch.argmax(probs, dim=1).item()
+    location = map_landmark_to_location(pred)
+    print(f"Predicted landmark_id: {pred}, Location: {location}")
     unnorm = tfm_reverse(img).permute(1, 2, 0).clamp(0, 1)
     plt.subplot(2, 4, i + 1)
     plt.imshow(unnorm)
