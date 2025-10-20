@@ -4,14 +4,8 @@ This project trains a Convolutional Neural Network (CNN) to recognize landmarks 
 
 ## Repository Structure
 
-- `data/` → raw + processed images
+
 - `dataset_creation/` → scripts for downloading + preprocessing
-- `models/` → CNN architectures
-- `training/` → training loops
-- `evaluation/` → evaluation scripts
-- `runs/` → logs
-- `saved_models/` → model checkpoints
-- `config.py` → hyperparameters and paths
 
 ## Quickstart
 
@@ -25,4 +19,4 @@ conda env create -f env.yml
 conda activate geolocation
 
 # Download a small subset for testing
-python dataset_creation/subset_gldv2.py
+python dataset_creation/download_dataset.sh
