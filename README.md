@@ -19,4 +19,4 @@ conda env create -f env.yml
 conda activate geolocation
 
 # Download a small subset for testing
-python dataset_creation/download_dataset.sh
+

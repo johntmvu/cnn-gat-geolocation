@@ -14,3 +14,4 @@ __pycache__/
 # Datset
 data/gldv2_micro/*
 data/gldv2_dataset/*
+data/gsv_50k/*
