@@ -16,11 +16,11 @@ import json
 # Configuration
 DATA_DIR = "data/gsv_50k/compressed_dataset"
 MODEL_DIR = "models"
-BATCH_SIZE = 32
+BATCH_SIZE = 64  # Increase for GPU
 NUM_EPOCHS = 10
 LEARNING_RATE = 1e-4
 IMG_SIZE = 224
-NUM_WORKERS = 0  # Set to 0 to avoid multiprocessing issues on macOS
+NUM_WORKERS = 2  # Use 2-4 workers on Colab
 
 os.makedirs(MODEL_DIR, exist_ok=True)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
