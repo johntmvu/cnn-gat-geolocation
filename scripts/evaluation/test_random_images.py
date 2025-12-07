@@ -21,29 +21,68 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-MODEL_PATH = str(PROJECT_ROOT / "models/best_country_model.pth")
-MAPPING_PATH = str(PROJECT_ROOT / "models/country_mapping.json")
+# Import hybrid model
+try:
+    from scripts.training.train_hybrid_cnn_vit import HybridCNNViT
+    MODEL_NAME = "hybrid_cnn_vit"
+    MODEL_PATH = str(PROJECT_ROOT / "models/best_hybrid_cnn_vit.pth")
+    MAPPINGS_PATH = str(PROJECT_ROOT / "models/hybrid_cnn_vit_mappings.json")
+    USE_HYBRID = True
+except ImportError:
+    print("Warning: CLIP not available, falling back to baseline model")
+    MODEL_NAME = "baseline_cnn"
+    MODEL_PATH = str(PROJECT_ROOT / "models/best_country_model.pth")
+    MAPPINGS_PATH = str(PROJECT_ROOT / "models/country_mapping.json")
+    USE_HYBRID = False
+
 DATA_DIR = str(PROJECT_ROOT / "data/gsv_50k/compressed_dataset")
+OUTPUT_DIR = str(PROJECT_ROOT / f"outputs/predictions/{MODEL_NAME}")
 IMG_SIZE = 224
 NUM_SAMPLES = 10  # Number of random images to test
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 print(f"Using device: {DEVICE}")
+print(f"Using model: {MODEL_NAME}")
 
-# Load country mapping
-with open(MAPPING_PATH, "r") as f:
-    country_to_idx = json.load(f)
+# Load mappings
+with open(MAPPINGS_PATH, "r") as f:
+    if USE_HYBRID:
+        mappings = json.load(f)
+        country_to_idx = mappings["country_to_idx"]
+        region_to_idx = mappings.get("region_to_idx", {})
+        climate_to_idx = mappings.get("climate_to_idx", {})
+    else:
+        country_to_idx = json.load(f)
+        region_to_idx = {}
+        climate_to_idx = {}
+
 idx_to_country = {v: k for k, v in country_to_idx.items()}
+idx_to_region = {v: k for k, v in region_to_idx.items()} if region_to_idx else {}
+idx_to_climate = {v: k for k, v in climate_to_idx.items()} if climate_to_idx else {}
 
 # Load model
-num_classes = len(country_to_idx)
-model = models.resnet50(weights=None)
-model.fc = nn.Linear(model.fc.in_features, num_classes)
-model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+num_countries = len(country_to_idx)
+num_regions = len(region_to_idx) if region_to_idx else 7
+num_climates = len(climate_to_idx) if climate_to_idx else 6
+
+if USE_HYBRID:
+    model = HybridCNNViT(
+        num_countries=num_countries,
+        num_regions=num_regions,
+        num_climates=num_climates,
+        clip_model_name="ViT-B/32"
+    )
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+    print(f"Loaded Hybrid CNN-ViT: {num_countries} countries, {num_regions} regions, {num_climates} climates")
+else:
+    model = models.resnet50(weights=None)
+    model.fc = nn.Linear(model.fc.in_features, num_countries)
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+    print(f"Loaded Baseline CNN: {num_countries} countries")
+
 model = model.to(DEVICE)
 model.eval()
-
-print(f"Model loaded with {num_classes} countries")
 
 # Image preprocessing
 transform = transforms.Compose([
@@ -72,12 +111,16 @@ def get_random_images(data_dir, num_samples):
     return samples
 
 def predict_image(image_path):
-    """Predict country from an image"""
+    """Predict country (and region/climate if hybrid) from an image"""
     image = Image.open(image_path).convert("RGB")
     image_tensor = transform(image).unsqueeze(0).to(DEVICE)
     
     with torch.no_grad():
-        outputs = model(image_tensor)
+        if USE_HYBRID:
+            country_out, region_out, climate_out, _ = model(image_tensor)
+            outputs = country_out
+        else:
+            outputs = model(image_tensor)
         probabilities = torch.nn.functional.softmax(outputs, dim=1)
         
         # Get top 3 predictions
@@ -88,8 +131,21 @@ def predict_image(image_path):
             country = idx_to_country[idx.item()]
             confidence = prob.item() * 100
             predictions.append((country, confidence))
+        
+        # Get region and climate predictions if using hybrid
+        region_pred = None
+        climate_pred = None
+        if USE_HYBRID and region_to_idx and climate_to_idx:
+            region_probs = torch.nn.functional.softmax(region_out, dim=1)
+            climate_probs = torch.nn.functional.softmax(climate_out, dim=1)
+            
+            region_conf, region_idx = torch.max(region_probs, 1)
+            climate_conf, climate_idx = torch.max(climate_probs, 1)
+            
+            region_pred = (idx_to_region[region_idx.item()], region_conf.item() * 100)
+            climate_pred = (idx_to_climate[climate_idx.item()], climate_conf.item() * 100)
     
-    return predictions, image
+    return predictions, image, region_pred, climate_pred
 
 def test_model():
     """Test model on random images and display results"""
@@ -102,7 +158,7 @@ def test_model():
     top3_correct = 0
     
     for idx, (img_path, true_country) in enumerate(samples, 1):
-        predictions, image = predict_image(img_path)
+        predictions, image, region_pred, climate_pred = predict_image(img_path)
         predicted_country, confidence = predictions[0]
         
         is_correct = predicted_country == true_country
@@ -128,6 +184,11 @@ def test_model():
             marker = "✓" if country == true_country else " "
             print(f"  {rank}. {country}: {conf:.2f}% {marker}")
         
+        # Print region and climate if available
+        if region_pred and climate_pred:
+            print(f"\nRegion: {region_pred[0]} (Confidence: {region_pred[1]:.2f}%)")
+            print(f"Climate: {climate_pred[0]} (Confidence: {climate_pred[1]:.2f}%)")
+        
         print("-"*80)
     
     # Summary statistics
@@ -147,7 +208,7 @@ def visualize_predictions(num_display=6):
     axes = axes.flatten()
     
     for idx, (img_path, true_country) in enumerate(samples):
-        predictions, image = predict_image(img_path)
+        predictions, image, region_pred, climate_pred = predict_image(img_path)
         predicted_country, confidence = predictions[0]
         
         # Display image
@@ -157,11 +218,18 @@ def visualize_predictions(num_display=6):
         # Title with prediction
         color = 'green' if predicted_country == true_country else 'red'
         title = f"True: {true_country}\nPred: {predicted_country}\n({confidence:.1f}%)"
-        axes[idx].set_title(title, fontsize=10, color=color)
+        
+        # Add region and climate if available
+        if region_pred and climate_pred:
+            title += f"\nRegion: {region_pred[0]}\nClimate: {climate_pred[0]}"
+        
+        axes[idx].set_title(title, fontsize=9, color=color)
     
+    plt.suptitle(f"Model: {MODEL_NAME.upper().replace('_', ' ')}", fontsize=14, fontweight='bold')
     plt.tight_layout()
-    plt.savefig('models/test_predictions.png', dpi=150, bbox_inches='tight')
-    print("\nVisualization saved to: models/test_predictions.png")
+    output_path = os.path.join(OUTPUT_DIR, 'test_predictions.png')
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    print(f"\nVisualization saved to: {output_path}")
     plt.close()
 
 if __name__ == "__main__":

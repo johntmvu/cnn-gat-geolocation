@@ -21,19 +21,32 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.training.train_multitask import MultiTaskGeoModel
+# Try to import hybrid model first, fallback to multitask
+try:
+    from scripts.training.train_hybrid_cnn_vit import HybridCNNViT
+    MODEL_NAME = "hybrid_cnn_vit"
+    MODEL_PATH = str(PROJECT_ROOT / "models/best_hybrid_cnn_vit.pth")
+    MAPPINGS_PATH = str(PROJECT_ROOT / "models/hybrid_cnn_vit_mappings.json")
+    USE_HYBRID = True
+    print("Using Hybrid CNN-ViT model")
+except ImportError:
+    from scripts.training.train_multitask import MultiTaskGeoModel
+    MODEL_NAME = "multitask_cnn"
+    MODEL_PATH = str(PROJECT_ROOT / "models/best_multitask_model.pth")
+    MAPPINGS_PATH = str(PROJECT_ROOT / "models/multitask_mappings.json")
+    USE_HYBRID = False
+    print("CLIP not available, using Multi-Task CNN model")
 
 # Configuration
-MODEL_PATH = str(PROJECT_ROOT / "models/best_multitask_model.pth")
-MAPPINGS_PATH = str(PROJECT_ROOT / "models/multitask_mappings.json")
 DATA_DIR = str(PROJECT_ROOT / "data/gsv_50k/compressed_dataset")
-OUTPUT_DIR = str(PROJECT_ROOT / "outputs/attention_maps")
+OUTPUT_DIR = str(PROJECT_ROOT / f"outputs/attention_maps/{MODEL_NAME}")
 IMG_SIZE = 224
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 print(f"Using device: {DEVICE}")
+print(f"Using model: {MODEL_NAME}")
 
 # Load mappings
 with open(MAPPINGS_PATH, "r") as f:
@@ -52,7 +65,16 @@ num_countries = len(country_to_idx)
 num_regions = len(region_to_idx)
 num_climates = len(climate_to_idx)
 
-model = MultiTaskGeoModel(num_countries, num_regions, num_climates)
+if USE_HYBRID:
+    model = HybridCNNViT(
+        num_countries=num_countries,
+        num_regions=num_regions,
+        num_climates=num_climates,
+        clip_model_name="ViT-B/32"
+    )
+else:
+    model = MultiTaskGeoModel(num_countries, num_regions, num_climates)
+
 model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 model = model.to(DEVICE)
 model.eval()
@@ -156,6 +178,10 @@ def visualize_single_prediction(image_path, save_path=None):
     
     fig.suptitle(title, fontsize=14, fontweight='bold', y=1.02)
     
+    # Add model name as subtitle
+    fig.text(0.5, 0.97, f"Model: {MODEL_NAME.upper().replace('_', ' ')}", 
+             ha='center', fontsize=10, style='italic')
+    
     plt.tight_layout()
     
     if save_path:
@@ -217,10 +243,12 @@ def visualize_multiple_samples(num_samples=6):
         if idx == 0:
             axes[idx, 2].set_title('Predictions', fontsize=12, fontweight='bold')
     
+    plt.suptitle(f"Model: {MODEL_NAME.upper().replace('_', ' ')}", fontsize=16, fontweight='bold', y=0.995)
     plt.tight_layout()
     save_path = os.path.join(OUTPUT_DIR, "attention_grid.png")
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     print(f"Saved grid visualization to: {save_path}")
+    print(f"All outputs saved to: {OUTPUT_DIR}")
     plt.close()
 
 def analyze_attention_patterns():
