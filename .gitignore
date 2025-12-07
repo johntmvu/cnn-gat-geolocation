@@ -1,6 +1,5 @@
 # Model checkpoints & logs
 models/*
-outputs/*
 
 # Python cache
 __pycache__/
@@ -11,7 +10,16 @@ __pycache__/
 *.h5
 *.ipynb_checkpoints
 
-# Datset
-data/gldv2_micro/*
-data/gldv2_dataset/*
-data/gsv_50k/*
+# Dataset - ignore files but keep directory structure
+data/gldv2_micro/**/*
+data/gldv2_micro/*.csv
+!data/gldv2_micro/**/.gitkeep
+data/gldv2_dataset/**/*
+!data/gldv2_dataset/**/.gitkeep
+data/gsv_50k/**/*
+!data/gsv_50k/**/.gitkeep
+
+# Keep CSV metadata files
+!data/**/*.csv
+!data/**/*.json
+!data/**/*.txt
