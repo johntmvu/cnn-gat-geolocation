@@ -1,12 +1,14 @@
 """
 Attention Visualization for Multi-Task Geolocation Model
 Generates heatmaps showing which image regions the model focuses on
+Uses Grad-CAM for hybrid models and spatial attention for multi-task models
 """
 
 import os
 import json
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import models, transforms
 from PIL import Image
 import matplotlib.pyplot as plt
@@ -28,14 +30,16 @@ try:
     MODEL_PATH = str(PROJECT_ROOT / "models/best_hybrid_cnn_vit.pth")
     MAPPINGS_PATH = str(PROJECT_ROOT / "models/hybrid_cnn_vit_mappings.json")
     USE_HYBRID = True
-    print("Using Hybrid CNN-ViT model")
+    USE_GRADCAM = True
+    print("Using Hybrid CNN-ViT model with Grad-CAM")
 except ImportError:
     from scripts.training.train_multitask import MultiTaskGeoModel
     MODEL_NAME = "multitask_cnn"
     MODEL_PATH = str(PROJECT_ROOT / "models/best_multitask_model.pth")
     MAPPINGS_PATH = str(PROJECT_ROOT / "models/multitask_mappings.json")
     USE_HYBRID = False
-    print("CLIP not available, using Multi-Task CNN model")
+    USE_GRADCAM = False
+    print("CLIP not available, using Multi-Task CNN model with spatial attention")
 
 # Configuration
 DATA_DIR = str(PROJECT_ROOT / "data/gsv_50k/compressed_dataset")
@@ -94,32 +98,119 @@ inv_normalize = transforms.Normalize(
     std=[1/0.229, 1/0.224, 1/0.225]
 )
 
+# Grad-CAM implementation
+class GradCAM:
+    """Grad-CAM for visualizing CNN attention"""
+    def __init__(self, model, target_layer):
+        self.model = model
+        self.target_layer = target_layer
+        self.gradients = None
+        self.activations = None
+        
+        # Register hooks
+        target_layer.register_forward_hook(self.save_activation)
+        target_layer.register_full_backward_hook(self.save_gradient)
+    
+    def save_activation(self, module, input, output):
+        self.activations = output.detach()
+    
+    def save_gradient(self, module, grad_input, grad_output):
+        self.gradients = grad_output[0].detach()
+    
+    def generate_cam(self, input_tensor, target_class=None):
+        """Generate Grad-CAM heatmap"""
+        # Forward pass
+        model_output = self.model(input_tensor)
+        
+        if isinstance(model_output, tuple):
+            country_out = model_output[0]
+        else:
+            country_out = model_output
+        
+        # Backward pass for target class
+        if target_class is None:
+            target_class = country_out.argmax(dim=1)
+        
+        self.model.zero_grad()
+        country_out[0, target_class].backward()
+        
+        # Compute Grad-CAM
+        gradients = self.gradients[0]  # (C, H, W)
+        activations = self.activations[0]  # (C, H, W)
+        
+        # Global average pooling of gradients
+        weights = gradients.mean(dim=(1, 2))  # (C,)
+        
+        # Weighted combination of activation maps
+        cam = torch.zeros(activations.shape[1:], dtype=torch.float32, device=activations.device)
+        for i, w in enumerate(weights):
+            cam += w * activations[i]
+        
+        # ReLU and normalize
+        cam = F.relu(cam)
+        cam = cam.cpu().numpy()
+        cam = cv2.resize(cam, (IMG_SIZE, IMG_SIZE))
+        cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
+        
+        return cam
+
 def predict_with_attention(image_path):
     """Predict and return attention map"""
     # Load and preprocess image
     original_image = Image.open(image_path).convert("RGB")
     image_tensor = transform(original_image).unsqueeze(0).to(DEVICE)
     
-    with torch.no_grad():
-        country_out, region_out, climate_out, attention_map = model(image_tensor)
+    if USE_GRADCAM:
+        # Use Grad-CAM for hybrid model
+        model.eval()
+        
+        # Get target layer (last conv layer of ResNet backbone)
+        target_layer = model.cnn_backbone[-1][-1].conv3  # Last conv layer in ResNet50
+        
+        # Create Grad-CAM
+        grad_cam = GradCAM(model, target_layer)
+        
+        # Generate attention map with gradients
+        image_tensor.requires_grad = True
+        attention = grad_cam.generate_cam(image_tensor)
         
         # Get predictions
-        country_probs = torch.nn.functional.softmax(country_out, dim=1)
-        region_probs = torch.nn.functional.softmax(region_out, dim=1)
-        climate_probs = torch.nn.functional.softmax(climate_out, dim=1)
-        
-        country_conf, country_idx = torch.max(country_probs, 1)
-        region_conf, region_idx = torch.max(region_probs, 1)
-        climate_conf, climate_idx = torch.max(climate_probs, 1)
-        
-        country = idx_to_country[country_idx.item()]
-        region = idx_to_region[region_idx.item()]
-        climate = idx_to_climate[climate_idx.item()]
-        
-        # Process attention map
-        attention = attention_map[0, 0].cpu().numpy()  # Shape: (H, W)
-        attention = cv2.resize(attention, (IMG_SIZE, IMG_SIZE))
-        attention = (attention - attention.min()) / (attention.max() - attention.min())
+        with torch.no_grad():
+            country_out, region_out, climate_out, _ = model(image_tensor)
+            
+            country_probs = torch.nn.functional.softmax(country_out, dim=1)
+            region_probs = torch.nn.functional.softmax(region_out, dim=1)
+            climate_probs = torch.nn.functional.softmax(climate_out, dim=1)
+            
+            country_conf, country_idx = torch.max(country_probs, 1)
+            region_conf, region_idx = torch.max(region_probs, 1)
+            climate_conf, climate_idx = torch.max(climate_probs, 1)
+            
+            country = idx_to_country[country_idx.item()]
+            region = idx_to_region[region_idx.item()]
+            climate = idx_to_climate[climate_idx.item()]
+    else:
+        # Use spatial attention for multi-task model
+        with torch.no_grad():
+            country_out, region_out, climate_out, attention_map = model(image_tensor)
+            
+            # Get predictions
+            country_probs = torch.nn.functional.softmax(country_out, dim=1)
+            region_probs = torch.nn.functional.softmax(region_out, dim=1)
+            climate_probs = torch.nn.functional.softmax(climate_out, dim=1)
+            
+            country_conf, country_idx = torch.max(country_probs, 1)
+            region_conf, region_idx = torch.max(region_probs, 1)
+            climate_conf, climate_idx = torch.max(climate_probs, 1)
+            
+            country = idx_to_country[country_idx.item()]
+            region = idx_to_region[region_idx.item()]
+            climate = idx_to_climate[climate_idx.item()]
+            
+            # Process attention map
+            attention = attention_map[0, 0].cpu().numpy()
+            attention = cv2.resize(attention, (IMG_SIZE, IMG_SIZE))
+            attention = (attention - attention.min()) / (attention.max() - attention.min())
     
     return {
         'country': (country, country_conf.item() * 100),
@@ -143,7 +234,7 @@ def create_attention_heatmap(image, attention_map, alpha=0.5):
     
     return overlay
 
-def visualize_single_prediction(image_path, save_path=None):
+def visualize_single_prediction(image_path, save_path=None, true_country=None):
     """Visualize prediction with attention for a single image"""
     result = predict_with_attention(image_path)
     
@@ -171,18 +262,21 @@ def visualize_single_prediction(image_path, save_path=None):
     region, region_conf = result['region']
     climate, climate_conf = result['climate']
     
-    title = f"Predictions:\n"
-    title += f"Country: {country} ({country_conf:.1f}%) | "
+    # Include actual country if provided
+    if true_country:
+        status = "✓" if country == true_country else "✗"
+        title = f"Model: {MODEL_NAME.upper().replace('_', ' ')}\n"
+        title += f"Actual: {true_country} | Predicted: {country} ({country_conf:.1f}%) {status}\n"
+    else:
+        title = f"Model: {MODEL_NAME.upper().replace('_', ' ')}\n"
+        title += f"Predicted Country: {country} ({country_conf:.1f}%)\n"
+    
     title += f"Region: {region} ({region_conf:.1f}%) | "
     title += f"Climate: {climate} ({climate_conf:.1f}%)"
     
-    fig.suptitle(title, fontsize=14, fontweight='bold', y=1.02)
+    fig.suptitle(title, fontsize=13, fontweight='bold', y=0.98)
     
-    # Add model name as subtitle
-    fig.text(0.5, 0.97, f"Model: {MODEL_NAME.upper().replace('_', ' ')}", 
-             ha='center', fontsize=10, style='italic')
-    
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0, 1, 0.94])
     
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -231,20 +325,21 @@ def visualize_multiple_samples(num_samples=6):
         
         # Predictions
         axes[idx, 2].axis('off')
-        pred_text = f"True Country: {true_country}\n\n"
-        pred_text += f"Predicted Country:\n{pred_country}\n({conf:.1f}%)\n\n"
-        pred_text += f"Region: {result['region'][0]}\n({result['region'][1]:.1f}%)\n\n"
-        pred_text += f"Climate: {result['climate'][0]}\n({result['climate'][1]:.1f}%)"
+        status = "✓" if pred_country == true_country else "✗"
+        pred_text = f"Actual: {true_country}\n"
+        pred_text += f"Predicted: {pred_country} {status}\n({conf:.1f}%)\n\n"
+        pred_text += f"Region:\n{result['region'][0]}\n({result['region'][1]:.1f}%)\n\n"
+        pred_text += f"Climate:\n{result['climate'][0]}\n({result['climate'][1]:.1f}%)"
         
-        color = 'green' if pred_country == true_country else 'red'
-        axes[idx, 2].text(0.1, 0.5, pred_text, fontsize=11, 
+        color = 'lightgreen' if pred_country == true_country else 'lightcoral'
+        axes[idx, 2].text(0.1, 0.5, pred_text, fontsize=10, 
                          verticalalignment='center',
-                         bbox=dict(boxstyle='round', facecolor=color, alpha=0.2))
+                         bbox=dict(boxstyle='round', facecolor=color, alpha=0.3))
         if idx == 0:
             axes[idx, 2].set_title('Predictions', fontsize=12, fontweight='bold')
     
-    plt.suptitle(f"Model: {MODEL_NAME.upper().replace('_', ' ')}", fontsize=16, fontweight='bold', y=0.995)
-    plt.tight_layout()
+    plt.suptitle(f"Model: {MODEL_NAME.upper().replace('_', ' ')}", fontsize=16, fontweight='bold', y=0.9985)
+    plt.tight_layout(rect=[0, 0, 1, 0.997])
     save_path = os.path.join(OUTPUT_DIR, "attention_grid.png")
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     print(f"Saved grid visualization to: {save_path}")
@@ -272,7 +367,7 @@ def analyze_attention_patterns():
             img_path = os.path.join(country_path, images[0])
             save_path = os.path.join(OUTPUT_DIR, f"attention_{country.replace(' ', '_')}.png")
             
-            result = visualize_single_prediction(img_path, save_path)
+            result = visualize_single_prediction(img_path, save_path, true_country=country)
             
             pred_country, conf = result['country']
             status = "✓ CORRECT" if pred_country == country else "✗ INCORRECT"

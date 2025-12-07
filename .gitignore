@@ -10,6 +10,10 @@ __pycache__/
 *.h5
 *.ipynb_checkpoints
 
+# Docs
+docs/PRESENTATION*
+DOCS/README_RESEARCH.MD
+
 # Dataset - ignore files but keep directory structure
 data/gldv2_micro/**/*
 data/gldv2_micro/*.csv
