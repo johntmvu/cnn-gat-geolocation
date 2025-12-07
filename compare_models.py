@@ -32,12 +32,14 @@ def plot_comparison():
     
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
     
-    epochs = range(1, len(baseline_metrics["train_acc"]) + 1)
+    # Handle different epoch counts
+    baseline_epochs = range(1, len(baseline_metrics["train_acc"]) + 1)
+    multitask_epochs = range(1, len(multitask_metrics["train_country_acc"]) + 1)
     
     # Plot 1: Training Accuracy Comparison
-    axes[0, 0].plot(epochs, baseline_metrics["train_acc"], 
+    axes[0, 0].plot(baseline_epochs, baseline_metrics["train_acc"], 
                    label='Single-Task Baseline', marker='o', linewidth=2)
-    axes[0, 0].plot(epochs, multitask_metrics["train_country_acc"], 
+    axes[0, 0].plot(multitask_epochs, multitask_metrics["train_country_acc"], 
                    label='Multi-Task + Attention', marker='s', linewidth=2)
     axes[0, 0].set_xlabel('Epoch', fontsize=12)
     axes[0, 0].set_ylabel('Training Accuracy (%)', fontsize=12)
@@ -46,9 +48,9 @@ def plot_comparison():
     axes[0, 0].grid(True, alpha=0.3)
     
     # Plot 2: Validation Accuracy Comparison
-    axes[0, 1].plot(epochs, baseline_metrics["val_acc"], 
+    axes[0, 1].plot(baseline_epochs, baseline_metrics["val_acc"], 
                    label='Single-Task Baseline', marker='o', linewidth=2)
-    axes[0, 1].plot(epochs, multitask_metrics["val_country_acc"], 
+    axes[0, 1].plot(multitask_epochs, multitask_metrics["val_country_acc"], 
                    label='Multi-Task + Attention', marker='s', linewidth=2)
     axes[0, 1].set_xlabel('Epoch', fontsize=12)
     axes[0, 1].set_ylabel('Validation Accuracy (%)', fontsize=12)
@@ -57,13 +59,13 @@ def plot_comparison():
     axes[0, 1].grid(True, alpha=0.3)
     
     # Plot 3: Loss Comparison
-    axes[1, 0].plot(epochs, baseline_metrics["train_loss"], 
+    axes[1, 0].plot(baseline_epochs, baseline_metrics["train_loss"], 
                    label='Single-Task Train', marker='o', linewidth=2, alpha=0.7)
-    axes[1, 0].plot(epochs, baseline_metrics["val_loss"], 
+    axes[1, 0].plot(baseline_epochs, baseline_metrics["val_loss"], 
                    label='Single-Task Val', marker='o', linewidth=2, linestyle='--', alpha=0.7)
-    axes[1, 0].plot(epochs, multitask_metrics["train_loss"], 
+    axes[1, 0].plot(multitask_epochs, multitask_metrics["train_loss"], 
                    label='Multi-Task Train', marker='s', linewidth=2, alpha=0.7)
-    axes[1, 0].plot(epochs, multitask_metrics["val_loss"], 
+    axes[1, 0].plot(multitask_epochs, multitask_metrics["val_loss"], 
                    label='Multi-Task Val', marker='s', linewidth=2, linestyle='--', alpha=0.7)
     axes[1, 0].set_xlabel('Epoch', fontsize=12)
     axes[1, 0].set_ylabel('Loss', fontsize=12)
@@ -72,11 +74,11 @@ def plot_comparison():
     axes[1, 0].grid(True, alpha=0.3)
     
     # Plot 4: Multi-Task Auxiliary Tasks
-    axes[1, 1].plot(epochs, multitask_metrics["val_country_acc"], 
+    axes[1, 1].plot(multitask_epochs, multitask_metrics["val_country_acc"], 
                    label='Country', marker='o', linewidth=2)
-    axes[1, 1].plot(epochs, multitask_metrics["val_region_acc"], 
+    axes[1, 1].plot(multitask_epochs, multitask_metrics["val_region_acc"], 
                    label='Region', marker='s', linewidth=2)
-    axes[1, 1].plot(epochs, multitask_metrics["val_climate_acc"], 
+    axes[1, 1].plot(multitask_epochs, multitask_metrics["val_climate_acc"], 
                    label='Climate', marker='^', linewidth=2)
     axes[1, 1].set_xlabel('Epoch', fontsize=12)
     axes[1, 1].set_ylabel('Validation Accuracy (%)', fontsize=12)
