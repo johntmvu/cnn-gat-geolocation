@@ -16,8 +16,14 @@ import json
 import clip
 
 # Configuration
-DATA_DIR = "data/gsv_50k/compressed_dataset"
-MODEL_DIR = "models"
+import sys
+from pathlib import Path
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+DATA_DIR = str(PROJECT_ROOT / "data/gsv_50k/compressed_dataset")
+MODEL_DIR = str(PROJECT_ROOT / "models")
 BATCH_SIZE = 128  # Can use larger batch since CLIP is more memory efficient
 NUM_EPOCHS = 10
 LEARNING_RATE = 1e-4
@@ -31,7 +37,7 @@ print(f"Using device: {DEVICE}")
 print(f"Using CLIP model: {CLIP_MODEL}")
 
 # Import region and climate mappings from train_multitask
-from train_multitask import get_region, get_climate
+from scripts.training.train_multitask import get_region, get_climate
 
 # CLIP-Only Model
 class CLIPGeoModel(nn.Module):

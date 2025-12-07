@@ -14,8 +14,14 @@ from tqdm import tqdm
 import json
 
 # Configuration
-DATA_DIR = "data/gsv_50k/compressed_dataset"  # Original dataset
-MODEL_DIR = "models"
+import sys
+from pathlib import Path
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+DATA_DIR = str(PROJECT_ROOT / "data/gsv_50k/compressed_dataset")
+MODEL_DIR = str(PROJECT_ROOT / "models")
 BATCH_SIZE = 128  # Larger batch for A100
 NUM_EPOCHS = 10
 LEARNING_RATE = 1e-4

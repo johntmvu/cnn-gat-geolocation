@@ -14,8 +14,14 @@ from tqdm import tqdm
 import json
 
 # Configuration
-DATA_DIR = "data/gsv_50k/compressed_dataset"
-MODEL_DIR = "models"
+import sys
+from pathlib import Path
+# Add project root to path for imports
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+DATA_DIR = PROJECT_ROOT / "data/gsv_50k/compressed_dataset"
+MODEL_DIR = PROJECT_ROOT / "models"
 BATCH_SIZE = 128
 NUM_EPOCHS = 10
 LEARNING_RATE = 1e-4
@@ -23,6 +29,8 @@ IMG_SIZE = 224
 NUM_WORKERS = 4
 
 os.makedirs(MODEL_DIR, exist_ok=True)
+DATA_DIR = str(DATA_DIR)
+MODEL_DIR = str(MODEL_DIR)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {DEVICE}")
 

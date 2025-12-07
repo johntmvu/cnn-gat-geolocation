@@ -6,9 +6,15 @@ Tests: Single-task vs Multi-task, With vs Without Attention
 import json
 import matplotlib.pyplot as plt
 import numpy as np
+import sys
+from pathlib import Path
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 # Configuration
-RESULTS_DIR = "models"
+RESULTS_DIR = str(PROJECT_ROOT / "models")
 
 def load_metrics(filename):
     """Load training metrics from JSON file"""

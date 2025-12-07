@@ -15,14 +15,19 @@ import cv2
 
 # Import model architecture
 import sys
-sys.path.append(os.path.dirname(__file__))
-from train_multitask import MultiTaskGeoModel
+from pathlib import Path
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.training.train_multitask import MultiTaskGeoModel
 
 # Configuration
-MODEL_PATH = "models/best_multitask_model.pth"
-MAPPINGS_PATH = "models/multitask_mappings.json"
-DATA_DIR = "data/gsv_50k/compressed_dataset"
-OUTPUT_DIR = "outputs/attention_maps"
+MODEL_PATH = str(PROJECT_ROOT / "models/best_multitask_model.pth")
+MAPPINGS_PATH = str(PROJECT_ROOT / "models/multitask_mappings.json")
+DATA_DIR = str(PROJECT_ROOT / "data/gsv_50k/compressed_dataset")
+OUTPUT_DIR = str(PROJECT_ROOT / "outputs/attention_maps")
 IMG_SIZE = 224
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

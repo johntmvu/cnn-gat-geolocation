@@ -14,9 +14,16 @@ from PIL import Image
 import matplotlib.pyplot as plt
 
 # Configuration
-MODEL_PATH = "models/best_country_model.pth"
-MAPPING_PATH = "models/country_mapping.json"
-DATA_DIR = "data/gsv_50k/compressed_dataset"
+import sys
+from pathlib import Path
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+MODEL_PATH = str(PROJECT_ROOT / "models/best_country_model.pth")
+MAPPING_PATH = str(PROJECT_ROOT / "models/country_mapping.json")
+DATA_DIR = str(PROJECT_ROOT / "data/gsv_50k/compressed_dataset")
 IMG_SIZE = 224
 NUM_SAMPLES = 10  # Number of random images to test
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
