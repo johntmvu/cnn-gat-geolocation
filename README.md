@@ -1,4 +1,4 @@
-# CNN-GAT Geolocation
+# GeoVision
 
 Multi-task deep learning models for geographic image classification using street view data.
 
