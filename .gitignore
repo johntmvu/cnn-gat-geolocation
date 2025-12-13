@@ -12,7 +12,8 @@ __pycache__/
 
 # Docs
 docs/PRESENTATION*
-DOCS/README_RESEARCH.MD
+docs/*RESEARCH*
+*.txt
 
 # Dataset - ignore files but keep directory structure
 data/gldv2_micro/**/*

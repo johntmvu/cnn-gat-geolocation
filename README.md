@@ -2,7 +2,7 @@
 
 Multi-task deep learning models for geographic image classification using street view data.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 cnn-gat-geolocation/
@@ -32,7 +32,7 @@ cnn-gat-geolocation/
 
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Setup Environment
 ```bash
@@ -69,7 +69,7 @@ python scripts/evaluation/test_random_images.py
 python scripts/visualization/visualize_attention.py
 ```
 
-## 🏗️ Model Architectures
+## Model Architectures
 
 ### 1. Baseline CNN (ResNet50)
 - Single-task country classification
@@ -95,7 +95,7 @@ python scripts/visualization/visualize_attention.py
 - Minimal trainable parameters (2.5M)
 - Best parameter efficiency
 
-## 📊 Dataset
+## Dataset
 
 **GSV_50K**: 50,000 street view images across 120+ countries
 - Training: 40,000 images (80%)
@@ -103,32 +103,32 @@ python scripts/visualization/visualize_attention.py
 - Organized by country folders
 - Geographic metadata: region, climate
 
-## 🎯 Tasks
+## Tasks
 
 1. **Country Classification**: 120+ countries
 2. **Region Classification**: 7 geographic regions
 3. **Climate Classification**: 6 climate zones
 
-## 📈 Results
+## Results
 
 Model performance and comparisons available in `outputs/metrics/`
 
-## 📚 Documentation
+## Documentation
 
 - **Research Workflow**: `docs/README_RESEARCH.md`
 - **Presentation Outline**: `docs/PRESENTATION_OUTLINE.md`
 
-## 🔧 Requirements
+## Requirements
 
 - Python 3.10+
 - PyTorch 2.0+
 - CUDA (optional, for GPU training)
 - See `env.yml` for complete dependencies
 
-## 📝 Citation
+## Citation
 
 If you use this code for research, please cite appropriately.
 
-## 📄 License
+## License
 
 MIT License
