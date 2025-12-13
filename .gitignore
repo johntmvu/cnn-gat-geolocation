@@ -11,9 +11,7 @@ __pycache__/
 *.ipynb_checkpoints
 
 # Docs
-docs/PRESENTATION*
-docs/*RESEARCH*
-*.txt
+docs/*
 
 # Dataset - ignore files but keep directory structure
 data/gldv2_micro/**/*

@@ -1,0 +1,972 @@
+================================================================================
+                    CNN-GAT GEOLOCATION PROJECT
+                         USER MANUAL
+================================================================================
+
+Project: Hybrid CNN-Vision Transformer for Geographic Image Classification
+Author: John Vu
+Last Updated: December 13, 2025
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. OVERVIEW
+2. SYSTEM REQUIREMENTS
+3. INSTALLATION & ENVIRONMENT SETUP
+4. DATASET STRUCTURE
+5. TRAINING MODELS
+6. EVALUATING MODELS
+7. VISUALIZATION TOOLS
+8. JUPYTER NOTEBOOKS
+9. PROJECT STRUCTURE
+10. TROUBLESHOOTING
+11. ADVANCED USAGE
+12. OUTPUT FILES & ARTIFACTS
+
+================================================================================
+1. OVERVIEW
+================================================================================
+
+This project implements four deep learning architectures for geographic image
+classification using street-view imagery:
+
+  1. Baseline CNN (ResNet50) - Single-task country classification
+  2. Multi-Task CNN - Hierarchical prediction (Country + Region + Climate)
+  3. Hybrid CNN-CLIP - Combines ResNet50 + CLIP ViT-B/32 with fusion module
+  4. CLIP-Only - Pure vision transformer approach
+
+Key Features:
+  - Multi-task learning with hierarchical geographic labels
+  - Attention mechanisms for interpretability
+  - Grad-CAM and spatial attention visualizations
+  - Comprehensive model comparison tools
+  - Dataset: GSV_50K (50,000 street-view images, 124 countries)
+
+Performance Summary:
+  - Baseline CNN:      62.12% country accuracy
+  - Multi-Task CNN:    61.78% country accuracy
+  - Hybrid CNN-CLIP:   67.10% country accuracy (BEST)
+  - CLIP-Only:         59.72% country accuracy
+
+================================================================================
+2. SYSTEM REQUIREMENTS
+================================================================================
+
+Hardware Requirements:
+  - GPU: NVIDIA GPU with 12+ GB VRAM (recommended: A100, V100, RTX 3090)
+    * Baseline/Multi-Task: 12 GB minimum
+    * Hybrid/CLIP: 28+ GB recommended
+  - RAM: 32 GB system memory recommended
+  - Storage: 50+ GB free space (dataset + models)
+
+Software Requirements:
+  - Operating System: Linux, macOS, or Windows with WSL2
+  - Python: 3.10
+  - CUDA: 11.8 or 12.1 (for GPU support)
+  - Conda or Miniconda
+
+Tested Configuration:
+  - NVIDIA A100 40GB GPU
+  - CUDA 12.1
+  - PyTorch 2.5.0
+  - Python 3.10.19
+
+================================================================================
+3. INSTALLATION & ENVIRONMENT SETUP
+================================================================================
+
+Step 1: Clone/Navigate to Project Directory
+------------------------------------------------------------
+cd /path/to/cnn-gat-geolocation
+
+Step 2: Create Conda Environment
+------------------------------------------------------------
+The project includes an environment file (env.yml) with all dependencies.
+
+conda env create -f env.yml
+
+This installs:
+  - PyTorch (with CUDA support)
+  - TorchVision, TorchAudio
+  - NumPy, Pandas, Matplotlib, Seaborn
+  - Pillow (image processing)
+  - scikit-learn
+  - OpenCV
+  - Grad-CAM (for attention visualization)
+  - TQDM (progress bars)
+  - Gradio (for UI demos)
+
+Step 3: Activate Environment
+------------------------------------------------------------
+conda activate geolocation
+
+Step 4: Install CLIP (Required for Hybrid/CLIP-Only Models)
+------------------------------------------------------------
+CLIP is not included in env.yml and must be installed separately:
+
+pip install git+https://github.com/openai/CLIP.git
+
+This installs OpenAI's CLIP library, which provides:
+  - Pre-trained ViT-B/32 vision encoder
+  - Image preprocessing for CLIP models
+  - Text encoder (not used in this project)
+
+Step 5: Verify Installation
+------------------------------------------------------------
+python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
+python -c "import clip; print('CLIP installed successfully')"
+
+Expected Output:
+  PyTorch: 2.5.0+cu121 (or similar)
+  CUDA Available: True
+  CLIP installed successfully
+
+Step 6: Verify GPU
+------------------------------------------------------------
+python -c "import torch; print(torch.cuda.get_device_name(0))"
+
+Expected Output:
+  NVIDIA A100-SXM4-40GB (or your GPU model)
+
+================================================================================
+4. DATASET STRUCTURE
+================================================================================
+
+Dataset Location:
+------------------------------------------------------------
+data/gsv_50k/compressed_dataset/
+
+Structure:
+------------------------------------------------------------
+data/gsv_50k/compressed_dataset/
+├── Aland/
+│   ├── image_001.jpg
+│   ├── image_002.jpg
+│   └── ...
+├── Albania/
+│   ├── image_001.jpg
+│   └── ...
+├── United States/
+│   ├── image_001.jpg
+│   ├── image_002.jpg
+│   └── ... (3,744 images)
+├── France/
+│   └── ... (2,156 images)
+└── ... (124 countries total)
+
+Dataset Statistics:
+------------------------------------------------------------
+Total Images:        50,000
+Countries:           124
+Geographic Regions:  8 (North America, Europe, Asia, etc.)
+Climate Zones:       6 (Tropical, Temperate, Continental, etc.)
+
+Split:
+  Training:          40,000 images (80%)
+  Validation:        10,000 images (20%)
+
+Image Format:
+  - Format: JPEG/PNG
+  - Input Size: 224x224 pixels (resized automatically)
+  - Normalization: ImageNet statistics
+
+Class Distribution:
+  - Highly imbalanced (312:1 ratio)
+  - Top 5 countries: USA (3,744), Russia (2,891), France (2,156), 
+                     Canada (1,983), Brazil (1,677)
+  - 15 countries have <10 images
+  - 47 countries have <50 images
+
+Hierarchical Labels:
+------------------------------------------------------------
+Each image has 3 labels:
+  1. Country (124 classes) - Primary task
+  2. Region (8 classes)    - Auxiliary task
+  3. Climate (6 classes)   - Auxiliary task
+
+Regions:
+  - North America, South America, Europe, Asia
+  - Africa, Oceania, Antarctica, Other
+
+Climates:
+  - Tropical, Temperate, Continental
+  - Arid, Mediterranean, Polar
+
+================================================================================
+5. TRAINING MODELS
+================================================================================
+
+All training scripts are located in: scripts/training/
+
+General Training Process:
+  1. Load dataset from data/gsv_50k/compressed_dataset/
+  2. Split into 80/20 train/validation
+  3. Train for 10 epochs with early stopping (patience=3)
+  4. Save best model checkpoint and metrics to models/
+  5. Generate training curves and statistics
+
+5.1 BASELINE CNN (ResNet50)
+------------------------------------------------------------
+Script: scripts/training/train_country_model.py
+
+Description:
+  - Single-task country classification (124 classes)
+  - ResNet50 pre-trained on ImageNet
+  - 23.5M parameters, all trainable
+  - Fastest training (2.8 hours on A100)
+
+Command:
+  python scripts/training/train_country_model.py
+
+Outputs:
+  - models/best_country_model.pth        (model weights)
+  - models/country_mapping.json          (class mappings)
+  - models/training_metrics.json         (training history)
+
+Training Parameters:
+  - Batch Size: 128
+  - Learning Rate: 1e-4
+  - Optimizer: AdamW with cosine annealing
+  - Weight Decay: 1e-4
+  - Label Smoothing: 0.1
+  - Augmentation: Horizontal flip, rotation (±15°), color jitter
+
+Expected Results:
+  - Country Accuracy: ~62.12%
+  - Training Time: ~2.8 hours (A100)
+  - GPU Memory: ~12 GB
+
+5.2 MULTI-TASK CNN WITH SPATIAL ATTENTION
+------------------------------------------------------------
+Script: scripts/training/train_multitask.py
+
+Description:
+  - Hierarchical multi-task learning
+  - Predicts: Country + Region + Climate
+  - Spatial attention module for interpretability
+  - 23.5M parameters
+  - Better regularization than baseline
+
+Command:
+  python scripts/training/train_multitask.py
+
+Outputs:
+  - models/best_multitask_model.pth
+  - models/multitask_mappings.json       (country/region/climate maps)
+  - models/multitask_metrics.json
+
+Training Parameters:
+  - Batch Size: 128
+  - Multi-Task Weights: α=1.0 (country), β=0.3 (region), γ=0.3 (climate)
+  - Total Loss: L = α*L_country + β*L_region + γ*L_climate
+
+Expected Results:
+  - Country Accuracy:  ~61.78%
+  - Region Accuracy:   ~81.56%
+  - Climate Accuracy:  ~73.89%
+  - Training Time: ~3.1 hours (A100)
+  - Better generalization than baseline (lower train-val gap)
+
+5.3 HYBRID CNN-CLIP (BEST PERFORMANCE)
+------------------------------------------------------------
+Script: scripts/training/train_hybrid_cnn_vit.py
+
+PREREQUISITES: CLIP must be installed!
+  pip install git+https://github.com/openai/CLIP.git
+
+Description:
+  - Dual-branch architecture:
+    * CNN branch: ResNet50 for local texture features
+    * CLIP branch: ViT-B/32 for global semantic understanding
+  - Attention-based fusion module (cross-attention)
+  - 180M total parameters (28.7M trainable)
+  - CLIP encoder frozen to preserve pre-training
+
+Command:
+  python scripts/training/train_hybrid_cnn_vit.py
+
+Outputs:
+  - models/best_hybrid_cnn_vit.pth
+  - models/hybrid_cnn_vit_mappings.json
+  - models/hybrid_cnn_vit_metrics.json
+
+Training Parameters:
+  - Batch Size: 64 (smaller due to memory requirements)
+  - Learning Rate: 1e-4
+  - CLIP Model: ViT-B/32 (151M params, frozen)
+  - Fusion Dimension: 768
+
+Architecture Details:
+  - CNN features: 2048-dim (ResNet50 final layer)
+  - CLIP features: 512-dim (ViT-B/32 visual encoder)
+  - Fusion module: Projects both to 768-dim, then multi-head attention (8 heads)
+  - Classification heads: 3 separate FC layers (country, region, climate)
+
+Expected Results:
+  - Country Accuracy:  ~67.10% (BEST!)
+  - Region Accuracy:   ~83.91%
+  - Climate Accuracy:  ~76.42%
+  - Training Time: ~4.2 hours (A100)
+  - GPU Memory: ~28 GB
+
+5.4 CLIP-ONLY (TRANSFORMER BASELINE)
+------------------------------------------------------------
+Script: scripts/training/train_clip_only.py
+
+PREREQUISITES: CLIP must be installed!
+
+Description:
+  - Pure vision transformer approach
+  - CLIP ViT-B/32 visual encoder (frozen)
+  - Minimal trainable parameters (2.5M)
+  - Fastest training but lower accuracy
+
+Command:
+  python scripts/training/train_clip_only.py
+
+Outputs:
+  - models/best_clip_only.pth
+  - models/clip_only_mappings.json
+  - models/clip_only_metrics.json
+
+Expected Results:
+  - Country Accuracy:  ~59.72%
+  - Training Time: ~1.8 hours (A100)
+  - GPU Memory: ~12 GB
+  - Best parameter efficiency (only 2.5M trainable)
+
+5.5 FILTERED TRAINING (CLASS IMBALANCE MITIGATION)
+------------------------------------------------------------
+Script: scripts/training/train_hybrid_filtered.py
+
+Description:
+  - Same as baseline CNN but filters out low-count countries
+  - Removes countries with <10 images
+  - Improves accuracy by reducing class imbalance noise
+
+Command:
+  python scripts/training/train_hybrid_filtered.py
+
+Results:
+  - Removes 15 countries (109 remain)
+  - Accuracy improves by ~1-2%
+  - Trade-off: Coverage vs. Performance
+
+================================================================================
+6. EVALUATING MODELS
+================================================================================
+
+All evaluation scripts are located in: scripts/evaluation/
+
+6.1 COMPARE ALL MODELS
+------------------------------------------------------------
+Script: scripts/evaluation/compare_all_models.py
+
+Description:
+  - Comprehensive comparison of all 4 architectures
+  - Generates performance tables and visualizations
+  - Analyzes model complexity, inference speed, accuracy
+
+Command:
+  python scripts/evaluation/compare_all_models.py
+
+Outputs:
+  - Console: Comparison table with accuracy, parameters, training time
+  - outputs/metrics/model_comparison.png (bar charts)
+  - outputs/metrics/training_curves.png (accuracy/loss over epochs)
+
+Output Example:
+  ==================================================
+  Model Comparison Summary
+  ==================================================
+  Model              | Country | Region | Climate | Params | Trainable
+  -------------------|---------|--------|---------|--------|----------
+  Baseline CNN       | 62.12%  | 78.45% | 71.23%  | 23.5M  | 23.5M
+  Multi-Task CNN     | 61.78%  | 81.56% | 73.89%  | 23.5M  | 23.5M
+  Hybrid CNN-CLIP    | 67.10%  | 83.91% | 76.42%  | 180.0M | 28.7M
+  CLIP-Only          | 59.72%  | 79.23% | 72.15%  | 88.0M  | 2.5M
+  ==================================================
+
+Prerequisites:
+  - All models must be trained first
+  - Model checkpoints must exist in models/ directory
+
+6.2 COMPARE BASELINE VS MULTI-TASK
+------------------------------------------------------------
+Script: scripts/evaluation/compare_models.py
+
+Description:
+  - Focused comparison between baseline and multi-task CNN
+  - Analyzes regularization benefits
+  - Visualizes multi-task learning trade-offs
+
+Command:
+  python scripts/evaluation/compare_models.py
+
+6.3 TEST ON RANDOM IMAGES
+------------------------------------------------------------
+Script: scripts/evaluation/test_random_images.py
+
+Description:
+  - Tests models on random validation samples
+  - Shows predictions vs. ground truth
+  - Useful for qualitative analysis
+
+Command:
+  python scripts/evaluation/test_random_images.py
+
+Output:
+  - Displays 10 random test images with predictions from all models
+  - Shows correct/incorrect predictions
+  - Highlights model agreement/disagreement
+
+================================================================================
+7. VISUALIZATION TOOLS
+================================================================================
+
+Location: scripts/visualization/
+
+7.1 HYBRID MODEL ATTENTION VISUALIZATION (GRAD-CAM)
+------------------------------------------------------------
+Script: scripts/visualization/visualize_attention.py
+
+Description:
+  - Generates Grad-CAM attention heatmaps for Hybrid CNN-CLIP model
+  - Shows which image regions the model focuses on
+  - Creates side-by-side visualizations (original, overlay, heatmap)
+
+Command:
+  python scripts/visualization/visualize_attention.py
+
+Outputs:
+  - outputs/attention_maps/hybrid_cnn_vit/
+    * country_name_image_XXX.png (3-column layout)
+    * Columns: Original Image | Attention Overlay | Pure Heatmap
+
+Visualization Layout:
+  ┌──────────────┬──────────────┬──────────────┐
+  │   Original   │   Overlay    │   Heatmap    │
+  │    Image     │ (with heat)  │   (colored)  │
+  └──────────────┴──────────────┴──────────────┘
+  Prediction: France (92.3% confidence)
+  Actual: France
+
+Interpretation:
+  - Hot colors (red/yellow): High attention regions
+  - Cool colors (blue): Low attention regions
+  - Model focuses on: Architecture, signs, vehicles, vegetation
+
+Prerequisites:
+  - Hybrid CNN-CLIP model must be trained
+  - models/best_hybrid_cnn_vit.pth must exist
+
+7.2 MULTI-TASK MODEL SPATIAL ATTENTION
+------------------------------------------------------------
+Script: scripts/visualization/visualize_multitask_attention.py
+
+Description:
+  - Visualizes learned spatial attention maps for Multi-Task CNN
+  - Shows attention for country/region/climate predictions
+  - Same 3-column layout as hybrid visualization
+
+Command:
+  python scripts/visualization/visualize_multitask_attention.py
+
+Outputs:
+  - outputs/attention_maps/multitask_cnn/
+    * country_name_image_XXX.png
+
+Prerequisites:
+  - Multi-Task CNN model must be trained
+  - models/best_multitask_model.pth must exist
+
+================================================================================
+8. JUPYTER NOTEBOOKS
+================================================================================
+
+Location: notebooks/
+
+8.1 DATASET EXPLORATORY DATA ANALYSIS (EDA)
+------------------------------------------------------------
+Notebook: notebooks/dataset_eda.ipynb
+
+Description:
+  - Comprehensive dataset analysis
+  - Visualizations of geographic/climate distributions
+  - Sample images from different countries
+  - Class imbalance analysis
+
+How to Run:
+  1. Activate environment:
+     conda activate geolocation
+
+  2. Launch Jupyter:
+     jupyter notebook notebooks/dataset_eda.ipynb
+
+  3. Run cells sequentially (Cell → Run All)
+
+Notebook Contents:
+  - Section 1: Load dataset metadata
+  - Section 2: Country distribution histogram
+  - Section 3: Region distribution pie chart
+  - Section 4: Climate distribution bar chart
+  - Section 5: Geographic heatmap (world map)
+  - Section 6: Sample images grid (1 image per country)
+  - Section 7: Class imbalance analysis
+  - Section 8: Image resolution statistics
+  - Section 9: Color distribution analysis
+
+Expected Outputs:
+  - Matplotlib/Seaborn plots displayed inline
+  - Summary statistics printed to notebook
+  - Sample images from dataset
+
+Key Visualizations:
+  1. Country Distribution (Log-Scale)
+     - Shows 312:1 imbalance ratio
+     - Top 5 vs. bottom 5 countries
+
+  2. Region Distribution
+     - Europe: 38.5%
+     - North America: 27.7%
+     - Asia: 21.2%
+     - Others: 12.6%
+
+  3. Climate Distribution
+     - Temperate: 45.2%
+     - Continental: 23.8%
+     - Mediterranean: 12.4%
+     - Others: 18.6%
+
+  4. Sample Images
+     - 1 representative image per country
+     - Shows geographic diversity
+     - Labeled with country/region/climate
+
+Cell Execution Order:
+  - Cells 1-2: Setup (imports, paths)
+  - Cells 3-4: Load dataset
+  - Cells 5-7: Distribution plots
+  - Cells 8-10: Visualizations
+  - Cells 11-13: Imbalance analysis
+  - Cells 14-16: Statistics
+  - Cells 17-20: Sample images
+
+Notes:
+  - All cells have outputs saved (from previous run)
+  - Can view outputs without re-running
+  - Re-run for updated analysis
+
+================================================================================
+9. PROJECT STRUCTURE
+================================================================================
+
+cnn-gat-geolocation/
+│
+├── data/                           # Dataset directory
+│   ├── gsv_50k/                   # GSV 50K dataset
+│   │   └── compressed_dataset/    # Country folders with images
+│   ├── gldv2_dataset/             # Google Landmarks V2 (optional)
+│   └── gldv2_micro/               # Micro dataset for testing
+│
+├── scripts/                        # All Python scripts
+│   ├── training/                  # Model training scripts
+│   │   ├── train_country_model.py      # Baseline CNN
+│   │   ├── train_multitask.py          # Multi-Task CNN
+│   │   ├── train_hybrid_cnn_vit.py     # Hybrid CNN-CLIP
+│   │   ├── train_clip_only.py          # CLIP-Only
+│   │   └── train_hybrid_filtered.py    # Filtered training
+│   ├── evaluation/                # Model evaluation
+│   │   ├── compare_all_models.py       # All models comparison
+│   │   ├── compare_models.py           # Baseline vs Multi-Task
+│   │   └── test_random_images.py       # Random sample testing
+│   └── visualization/             # Attention visualization
+│       ├── visualize_attention.py      # Hybrid Grad-CAM
+│       └── visualize_multitask_attention.py  # Multi-Task attention
+│
+├── models/                         # Saved model checkpoints
+│   ├── best_country_model.pth     # Baseline CNN weights
+│   ├── best_multitask_model.pth   # Multi-Task CNN weights
+│   ├── best_hybrid_cnn_vit.pth    # Hybrid model weights
+│   ├── best_clip_only.pth         # CLIP-Only weights
+│   ├── country_mapping.json       # Class mappings
+│   ├── multitask_mappings.json    # Multi-task mappings
+│   ├── hybrid_cnn_vit_mappings.json
+│   ├── clip_only_mappings.json
+│   ├── training_metrics.json      # Training history
+│   ├── multitask_metrics.json
+│   ├── hybrid_cnn_vit_metrics.json
+│   └── clip_only_metrics.json
+│
+├── outputs/                        # Generated outputs
+│   ├── attention_maps/            # Attention visualizations
+│   │   ├── hybrid_cnn_vit/        # Hybrid Grad-CAM outputs
+│   │   └── multitask_cnn/         # Multi-Task attention outputs
+│   ├── metrics/                   # Training curves, comparisons
+│   │   └── training_metrics.json
+│   └── predictions/               # Prediction outputs
+│       ├── baseline_cnn/
+│       └── hybrid_cnn_vit/
+│
+├── notebooks/                      # Jupyter notebooks
+│   └── dataset_eda.ipynb          # Dataset EDA notebook
+│
+├── docs/                           # Documentation
+│   ├── README.md                  # Research documentation
+│   ├── README_RESEARCH.md         # Detailed research notes
+│   ├── RESEARCH_PAPER_IEEE.md     # IEEE research paper
+│   ├── PRESENTATION_OUTLINE.md    # Presentation outline
+│   ├── PRESENTATION.md            # Full presentation
+│   ├── PRESENTATION_10MIN.md      # 10-min presentation
+│   └── QUICKSTART.md              # Quick start guide
+│
+├── archive/                        # Deprecated/old scripts
+│   ├── evaluate_model.py
+│   ├── test_country_model.py
+│   ├── test_model_ui.py
+│   └── train_model.py
+│
+├── env.yml                         # Conda environment file
+├── README.md                       # Main README
+└── USER_MANUAL.txt                # This file
+
+================================================================================
+10. TROUBLESHOOTING
+================================================================================
+
+10.1 CUDA OUT OF MEMORY
+------------------------------------------------------------
+Error: RuntimeError: CUDA out of memory
+
+Solutions:
+  1. Reduce batch size in training script:
+     - Baseline/Multi-Task: BATCH_SIZE = 64 (instead of 128)
+     - Hybrid: BATCH_SIZE = 32 (instead of 64)
+
+  2. Use gradient accumulation:
+     - Accumulate gradients over 2-4 batches before optimizer step
+
+  3. Use mixed precision training (already enabled):
+     - FP16 reduces memory usage by 40-50%
+
+  4. Clear GPU cache:
+     torch.cuda.empty_cache()
+
+  5. Close other GPU processes:
+     nvidia-smi  # Check GPU usage
+     kill -9 <PID>  # Kill process
+
+10.2 CLIP NOT INSTALLED
+------------------------------------------------------------
+Error: ModuleNotFoundError: No module named 'clip'
+
+Solution:
+  pip install git+https://github.com/openai/CLIP.git
+
+If git installation fails:
+  1. Clone manually:
+     git clone https://github.com/openai/CLIP.git
+     cd CLIP
+     pip install -e .
+
+  2. Or use alternative:
+     pip install open_clip_torch
+
+10.3 MISSING DATASET
+------------------------------------------------------------
+Error: FileNotFoundError: data/gsv_50k/compressed_dataset/ not found
+
+Solution:
+  1. Verify dataset location:
+     ls data/gsv_50k/compressed_dataset/
+
+  2. Update DATA_DIR in training scripts:
+     DATA_DIR = "/path/to/your/dataset"
+
+  3. Check dataset structure (must have country folders)
+
+10.4 SLOW TRAINING
+------------------------------------------------------------
+Issue: Training takes too long
+
+Solutions:
+  1. Verify GPU usage:
+     nvidia-smi  # Should show Python process using GPU
+
+  2. Increase num_workers:
+     NUM_WORKERS = 8  # More parallel data loading
+
+  3. Use SSD for dataset storage (not HDD)
+
+  4. Enable mixed precision (already enabled):
+     torch.cuda.amp.autocast()
+
+  5. Reduce validation frequency:
+     - Validate every 2-3 epochs instead of every epoch
+
+10.5 INCOMPATIBLE PYTORCH VERSION
+------------------------------------------------------------
+Error: RuntimeError: CUDA error: no kernel image is available
+
+Solution:
+  1. Reinstall PyTorch with correct CUDA version:
+     conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+
+  2. Verify CUDA version:
+     nvcc --version
+     nvidia-smi
+
+  3. Match PyTorch CUDA version to system CUDA version
+
+10.6 JUPYTER NOTEBOOK KERNEL CRASHES
+------------------------------------------------------------
+Issue: Kernel dies when running EDA notebook
+
+Solutions:
+  1. Increase memory limit:
+     - Reduce image grid size
+     - Process countries in batches
+
+  2. Restart kernel:
+     Kernel → Restart
+
+  3. Clear outputs before running:
+     Cell → All Output → Clear
+
+  4. Run cells individually (not "Run All")
+
+================================================================================
+11. ADVANCED USAGE
+================================================================================
+
+11.1 CUSTOM HYPERPARAMETER TUNING
+------------------------------------------------------------
+Modify training scripts to experiment with hyperparameters:
+
+Learning Rate:
+  LEARNING_RATE = 5e-5  # Lower for fine-tuning
+
+Batch Size:
+  BATCH_SIZE = 256  # Larger for better gradient estimates
+
+Multi-Task Weights:
+  ALPHA = 1.0    # Country weight
+  BETA = 0.5     # Region weight
+  GAMMA = 0.5    # Climate weight
+
+Label Smoothing:
+  criterion = nn.CrossEntropyLoss(label_smoothing=0.2)
+
+11.2 TRANSFER LEARNING TO NEW DATASET
+------------------------------------------------------------
+To use trained models on a different dataset:
+
+  1. Load pre-trained model:
+     model = torch.load('models/best_hybrid_cnn_vit.pth')
+
+  2. Freeze feature extractor:
+     for param in model.cnn.parameters():
+         param.requires_grad = False
+
+  3. Replace classification head:
+     model.classifier = nn.Linear(768, num_new_classes)
+
+  4. Fine-tune on new data:
+     # Train only classification head for 3-5 epochs
+
+11.3 INFERENCE ON NEW IMAGES
+------------------------------------------------------------
+To classify a single image:
+
+  import torch
+  from PIL import Image
+  from torchvision import transforms
+
+  # Load model
+  model = torch.load('models/best_hybrid_cnn_vit.pth')
+  model.eval()
+
+  # Load and preprocess image
+  img = Image.open('path/to/image.jpg')
+  transform = transforms.Compose([
+      transforms.Resize(256),
+      transforms.CenterCrop(224),
+      transforms.ToTensor(),
+      transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                          std=[0.229, 0.224, 0.225])
+  ])
+  img_tensor = transform(img).unsqueeze(0)
+
+  # Predict
+  with torch.no_grad():
+      output = model(img_tensor)
+      pred_class = output.argmax(dim=1).item()
+
+  # Load class mapping
+  import json
+  with open('models/hybrid_cnn_vit_mappings.json', 'r') as f:
+      mappings = json.load(f)
+  
+  idx_to_country = {v: k for k, v in mappings['country_to_idx'].items()}
+  print(f"Predicted country: {idx_to_country[pred_class]}")
+
+11.4 ENSEMBLE PREDICTIONS
+------------------------------------------------------------
+Combine predictions from multiple models:
+
+  # Load all models
+  baseline = torch.load('models/best_country_model.pth')
+  multitask = torch.load('models/best_multitask_model.pth')
+  hybrid = torch.load('models/best_hybrid_cnn_vit.pth')
+
+  # Get predictions
+  with torch.no_grad():
+      pred1 = baseline(img_tensor).softmax(dim=1)
+      pred2 = multitask(img_tensor)[0].softmax(dim=1)  # Country output
+      pred3 = hybrid(img_tensor)[0].softmax(dim=1)
+
+  # Average probabilities
+  ensemble_pred = (pred1 + pred2 + pred3) / 3
+  final_class = ensemble_pred.argmax(dim=1).item()
+
+11.5 EXPORT TO ONNX FOR DEPLOYMENT
+------------------------------------------------------------
+Convert model to ONNX format for production:
+
+  import torch.onnx
+
+  model = torch.load('models/best_hybrid_cnn_vit.pth')
+  model.eval()
+
+  dummy_input = torch.randn(1, 3, 224, 224)
+  
+  torch.onnx.export(
+      model,
+      dummy_input,
+      "models/hybrid_model.onnx",
+      export_params=True,
+      opset_version=14,
+      input_names=['input'],
+      output_names=['country', 'region', 'climate'],
+      dynamic_axes={'input': {0: 'batch_size'}}
+  )
+
+================================================================================
+12. OUTPUT FILES & ARTIFACTS
+================================================================================
+
+12.1 MODEL CHECKPOINTS (.pth files)
+------------------------------------------------------------
+Location: models/
+
+Files:
+  - best_country_model.pth        (~94 MB)
+  - best_multitask_model.pth      (~94 MB)
+  - best_hybrid_cnn_vit.pth       (~720 MB)
+  - best_clip_only.pth            (~352 MB)
+
+Contents:
+  - Model state_dict (weights and biases)
+  - Optimizer state (for resuming training)
+  - Training epoch number
+  - Best validation accuracy
+
+Load Example:
+  checkpoint = torch.load('models/best_hybrid_cnn_vit.pth')
+  model.load_state_dict(checkpoint['model_state_dict'])
+
+12.2 CLASS MAPPINGS (JSON files)
+------------------------------------------------------------
+Location: models/
+
+Files:
+  - country_mapping.json          (country_to_idx dictionary)
+  - multitask_mappings.json       (country/region/climate mappings)
+  - hybrid_cnn_vit_mappings.json  (same as multitask)
+  - clip_only_mappings.json       (same as multitask)
+
+Format:
+  {
+    "country_to_idx": {
+      "United States": 0,
+      "Russia": 1,
+      "France": 2,
+      ...
+    },
+    "region_to_idx": {
+      "North America": 0,
+      "Europe": 1,
+      ...
+    },
+    "climate_to_idx": {
+      "Temperate": 0,
+      "Continental": 1,
+      ...
+    }
+  }
+
+12.3 TRAINING METRICS (JSON files)
+------------------------------------------------------------
+Location: models/
+
+Files:
+  - training_metrics.json
+  - multitask_metrics.json
+  - hybrid_cnn_vit_metrics.json
+  - clip_only_metrics.json
+
+Format:
+  {
+    "train_loss": [2.45, 1.89, 1.56, ...],  # Per epoch
+    "val_loss": [2.67, 2.01, 1.78, ...],
+    "train_acc": [45.2, 58.3, 63.1, ...],
+    "val_acc": [42.1, 55.7, 61.2, ...],
+    "best_epoch": 7,
+    "best_val_acc": 67.10,
+    "total_epochs": 10,
+    "training_time_hours": 4.2
+  }
+
+12.4 ATTENTION VISUALIZATIONS (PNG files)
+------------------------------------------------------------
+Location: outputs/attention_maps/
+
+Hybrid Model:
+  outputs/attention_maps/hybrid_cnn_vit/
+    - france_image_001.png
+    - japan_image_042.png
+    - ...
+
+Multi-Task Model:
+  outputs/attention_maps/multitask_cnn/
+    - france_image_001.png
+    - ...
+
+Format:
+  - 3-column PNG images
+  - Resolution: 224×224 per column (672×224 total)
+  - Caption with prediction and ground truth
+
+12.5 COMPARISON PLOTS
+------------------------------------------------------------
+Location: outputs/metrics/
+
+Generated by compare_all_models.py:
+  - model_comparison.png          (accuracy bar chart)
+  - training_curves.png           (loss/accuracy over epochs)
+  - confusion_matrix.png          (country confusion heatmap)
+  - per_class_accuracy.png        (accuracy per country)
+
+================================================================================
+END OF USER MANUAL
+================================================================================
+
+For questions, issues, or contributions:
+  - GitHub: [repository URL]
+  - Email: [your.email@university.edu]
+  - Documentation: docs/README.md
+
+Last Updated: December 13, 2025
+Version: 1.0

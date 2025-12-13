@@ -2,35 +2,6 @@
 
 Multi-task deep learning models for geographic image classification using street view data.
 
-## Project Structure
-
-```
-GeoVision/
-├── scripts/
-│   ├── training/           # Model training scripts
-│   │   ├── train_country_model.py      # Baseline ResNet50
-│   │   ├── train_multitask.py          # Multi-task with attention
-│   │   ├── train_hybrid_cnn_vit.py     # Hybrid CNN + CLIP
-│   │   └── train_clip_only.py          # CLIP-only model
-│   ├── evaluation/         # Model comparison and testing
-│   │   ├── compare_models.py           # Baseline vs Multi-task
-│   │   ├── compare_all_models.py       # All 4 models comparison
-│   │   └── test_random_images.py       # Random sample testing
-│   └── visualization/      # Attention and results visualization
-│       └── visualize_attention.py
-├── models/                 # Saved model checkpoints and metrics
-├── data/                   # Dataset directory
-│   └── gsv_50k/           # Google Street View 50K dataset
-├── outputs/               # Generated outputs
-│   ├── attention_maps/    # Attention visualizations
-│   └── metrics/           # Training curves and comparisons
-├── docs/                  # Documentation
-│   ├── README_RESEARCH.md
-│   └── PRESENTATION_OUTLINE.md
-├── archive/               # Deprecated scripts
-└── env.yml               # Conda environment file
-
-```
 
 ## Quick Start
 
