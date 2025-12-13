@@ -5,7 +5,7 @@ Multi-task deep learning models for geographic image classification using street
 ## Project Structure
 
 ```
-cnn-gat-geolocation/
+GeoVision/
 ├── scripts/
 │   ├── training/           # Model training scripts
 │   │   ├── train_country_model.py      # Baseline ResNet50
